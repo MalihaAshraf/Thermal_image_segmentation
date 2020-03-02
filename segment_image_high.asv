@@ -16,15 +16,17 @@ if (strcmp(mode, 'debug'))
     figure, imshow(img, [])
     I1 = imbinarize(imadjust(medfilt2(im2double(img))), 'adapt', 'Sensitivity', var(1));
     figure, imshow(I1), title('1. binarize')
-    I2 = bwareaopen(I1, var(3));
-    figure, imshow(I2), title('2. area open')
-    I3 = imdilate(I2, se);
-    figure, imshow(I3), title('3. dilate')
-    I4 = imfill(I3, [y x]);
-    figure, imshow(I4), title('4. fill');
-    I5 = imdilate(I4, se2);
-    I6 = imerode(I5, se2);
-    I7 = imerode(I6, se);
+    I2 = imerode(I1, se);
+    figure, imshow(I2), title('2. erode')
+    I3 = bwareaopen(I2, var(3));
+    figure, imshow(I3), title('3. area open')
+    I4 = imdilate(I3, se);
+    figure, imshow(I4), title('3. dilate')
+    I5 = imfill(I4, [y x]);
+    figure, imshow(I5), title('4. fill');
+    I6 = imdilate(I5, se2);
+    I7 = imerode(I5, se2);
+    I8 = imerode(I6, se);
     
     out = I7;
     figure, imshow(out), title('final')
