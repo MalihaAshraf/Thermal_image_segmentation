@@ -6,11 +6,13 @@ addpath('FLIR_class');
 % Browse to file
 [file,path] = uigetfile('*.*');
 
+%%
 % Read .ptw file
 data = FlirMovieReader([path file]);
 
 % File information
 vars = info(data);
+nframes = double(vars.numFrames);
 i = 1;
 % rect = [194, 100, 74, 57];
 % rect2 = [24 35 28 23];
@@ -27,7 +29,7 @@ clear x y
 
 % Choose region of interest
 frame_r = imRotateCrop(frame, angle);
-sprintf('Please drag rectangle across area of interest\nPress Enter to continue...')
+sprintf('Please drag rectangle across area of interest top-left to bottom-right\nPress Enter to continue...')
 pause()
 figure, imshow(imadjust(im2double(frame_r)))
 rect = getrect();
@@ -65,9 +67,9 @@ end
 % i = 1
 
 
-% figure, imshow(timelapse_cropped(:,:,500), [])
+figure, imshow(timelapse_cropped(:,:,500), [])
 
-%% Remove unwanted frames
+%% Remove unwanted frames (optional)
 
 sel = [];                       % Enter frame indices to be removed, e.g., [1:50, 200, 500:890]
 timelapse_raw(:,:, sel) = [];
@@ -75,7 +77,8 @@ timelapse_cropped(:,:, sel) = [];
 MaxTemp(:,:,sel) = [];
 MeanTemp(:,:,sel) = [];
 
-%% Initialize variables
+
+%% Initialize variables (sample dimensions)
 
 sprintf('Please click the top and bottom points of the sample\nPress Enter to continue...')
 pause()
@@ -95,19 +98,42 @@ d = abs(x(2)-x(1));
 
 clear n x y
 
-h_px = h/7.41; % px/mm; Enter measured height
-d_px = d/7.55; % px/mm; Enter measured diameter
+h_px = h/10.31; % px/mm; Enter measured height
+d_px = d/12.05; % px/mm; Enter measured diameter
+
+
+%% Fine-tune segmentation
+
+% low
+close all
+I =  timelapse_cropped(:,:, 20);
+var_low = [0.59, 3, 400];
+[~, var_low(4), var_low(5)] = segment_image_low(I, 'debug', var_low);
+
+%%
+% mid
+close all
+I =  timelapse_cropped(:,:, 80);
+var_mid = [0.59, 3, 400, var_low(4), var_low(5)];
+segment_image_mid(I, 'debug', var_mid);
+
+%%
+% high
+close all
+I =  timelapse_cropped(:,:, 2000);
+var_high = {0.6, 3, 30, var_low(4), var_low(5)};
+[~, var_high{6}, var_high{7}] = segment_image_high(I, 'debug', var_high);
 
 %% Process images
 
 for i = 1:size(timelapse_cropped, 3)
    I = timelapse_cropped(:,:, i);
    if i <=45        % Frame where the sample and bck is the same temp. Gray image
-       I_seg(:,:,i) = segment_image_low(I);
-   elseif i <=150 && i > 45         % 
-       I_seg(:,:,i) = segment_image_mid(I);
+       I_seg(:,:,i) = segment_image_low(I, 'normal', var_low);
+   elseif i <=140 && i > 45         % 
+       I_seg(:,:,i) = segment_image_mid(I, 'normal', var_mid);
    else
-       I_seg(:,:,i) = segment_image_high(I);
+       I_seg(:,:,i) = segment_image_high(I, 'normal', var_high);
    end
    [vol(i), area(i)] = region_volume(I_seg(:,:,i), h_px, d_px);
    
@@ -125,27 +151,34 @@ sel2 = [];
 sprintf('Please press y or n for acceptable or not acceptable segmentation\nPress Esc to exit\n...')
 % sprintf('\nPress Enter to continue...')
 
+figure,
 while(flag)
-    figure, imshow(I_seg(:,:,i));
+    clf
+    imshow(I_seg(:,:,i));
+    title(['Frame: ' num2str(i)])
     [~,~, button] = ginput(1);
     switch button
-        case 110
+        case 110 % no
             sel = [sel i];
-        case 121
+        case 121 % yes
             sel2 = [sel2 i];
         case 27
             break
     end
     i = i+1;
 end
-close all
+% close all
 clear flag i
+
 
 %% Calculate porosity
 
-vol_init = 0.331;
-% vol_init = mean(vol(sel2(find(sel2 < 80))));
-t = 1:2861;
+vol_pyc = 1.1665;
+vol_init = mean(vol(sel2));
+display(['Calculated volume: ' num2str(vol_init)]);
+
+t = 1:nframes;
+p_pyc = (vol-vol_pyc).*100./vol;
 p = (vol-vol_init).*100./vol;
 
 %% Identify outliers
@@ -159,17 +192,21 @@ options = fitoptions('Method','SmoothingSpline',...
                      'SmoothingParam', 0.001);
 f1 = fit(t', p','poly9', 'Normalize','on','Robust','Bisquare');
 figure, plot(f1, t, p)
+title('Fit with outliers')
 ylim([0 100])
 
 % identify outliers based on fits
 fdata = feval(f1, t);
-err = abs(fdata - p') > 1*std(p');
+out_p = 1.7; %outlier parameter
+err = abs(fdata - p') > out_p*std(p');
 outliers = excludedata(t, p, 'indices', err);
 
 f2 = fit(t', p', 'poly9', 'Normalize','on','Robust','Bisquare',...
     'Exclude', outliers);
 
-figure, plot(f2, t, p)
+figure, plot(f2, t(~outliers), p(~outliers))
+title('Fit without outliers')
+
 ylim([0 100])
 
 % Model values
