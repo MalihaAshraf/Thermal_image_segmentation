@@ -3,25 +3,53 @@
 clear all; close all
 addpath('FLIR_class');
 
-% Browse to file
-[file,path] = uigetfile('*.*');
+file_type = 'jpg'; % options: jpg, ptw
 
-%%
-% Read .ptw file
-data = FlirMovieReader([path file]);
+if strcmp(file_type, 'jpg')
+    % Browse to directory
+    path = uigetdir('*.*')
+elseif strcmp(file_type, 'ptw')
+    % Browse to file
+    [file,path] = uigetfile('*.*');
+end
 
-% File information
-vars = info(data);
-nframes = double(vars.numFrames);
+
+%% Read files
+
+if strcmp(file_type, 'jpg')
+    files = dir([path '/*.' file_type]);
+    nframes = double(length(files));
+    ref = 500; % reference index of frame number
+    frame = rgb2gray(imread(fullfile(files(ref).folder, files(ref).name)));
+    clear ref
+    
+elseif strcmp(file_type, 'ptw')
+    % Read .ptw file
+    data = FlirMovieReader([path file]);
+
+    % File information
+    vars = info(data);
+    nframes = double(vars.numFrames);
+    clear vars
+    
+    [frame, ~] = read(data, 1);
+end
+
+
 i = 1;
 % rect = [194, 100, 74, 57];
 % rect2 = [24 35 28 23];
 
 % Choose rotation angle
-[frame, metadata] = read(data, 1);
+sprintf('Zoom in or out of the image using scroll. Press Enter to exit');
 sprintf('Please click on any two points on the horizontal reference surface\nPress Enter to continue...')
 pause()
-figure, imshow(frame, [])
+figure, imshow(frame, []), title('Scroll to zoom. Press Enter to exit')
+zoom on
+waitfor(gcf, 'CurrentCharacter', char(13))
+zoom reset
+zoom off
+title('Click on any two points on the horizontal reference surface')
 [x, y] = ginput(2);
 close all
 angle = get_slope(x, y);
@@ -29,38 +57,60 @@ clear x y
 
 % Choose region of interest
 frame_r = imRotateCrop(frame, angle);
+sprintf('Zoom in or out of the image using scroll. Press Enter to exit');
 sprintf('Please drag rectangle across area of interest top-left to bottom-right\nPress Enter to continue...')
 pause()
-figure, imshow(imadjust(im2double(frame_r)))
+figure, imshow(imadjust(im2double(frame_r))), title('Scroll to zoom. Press Enter to exit')
+zoom on
+waitfor(gcf, 'CurrentCharacter', char(13))
+zoom reset
+zoom off
+title('Drag rectangle across area of interest top-left to bottom-right')
 rect = getrect();
 rect = round(rect);
 close all
 clear frame metadata frame_r
 
-
-
 %% Read frames
 
-data = FlirMovieReader([path file]);
-while ~isDone(data)
-    [frame, metadata] = step(data);
-    frame_r = imrotate(frame, angle);
-    d = 25;         % Adjust this number to fix cropping in x direction
-    frame_c = frame_r(rect(2):rect(2)+rect(4), rect(1)+d:rect(1)+rect(3));
-%     frame_s = frame_c(rect2(2):rect2(2)+rect2(4), rect2(1):rect2(1)+rect2(3));
-    
-    timelapse_raw(:,:,i) = frame;
-    timelapse_cropped(:,:,i) = frame_c;
-    MaxTemp(i, 1) = max(max(frame));
-    MaxTemp(i, 2) = max(max(frame_c));
-%     MaxTemp(i, 3) = max(max(frame_s));
-    
-    MeanTemp(i, 1) = mean(mean(frame));
-    MeanTemp(i, 2) = mean(mean(frame_c));
-%     MeanTemp(i, 3) = mean(mean(frame_s));
-    
-    i = i+1;
+if strcmp(file_type, 'jpg')
+    for i = 1:nframes
+        frame = (imread(fullfile(files(i).folder, files(i).name)));
+        frame = frame(:,:,2);
+        frame_r = imRotateCrop(frame, angle);
+        frame_c = frame_r(rect(2):rect(2)+rect(4), rect(1):rect(1)+rect(3));
+        
+        timelapse_cropped(:,:,i) = frame_c;
+        MaxTemp(i, 1) = max(max(frame));
+        MaxTemp(i, 2) = max(max(frame_c));
+    %     MaxTemp(i, 3) = max(max(frame_s));
+
+        MeanTemp(i, 1) = mean(mean(frame));
+        MeanTemp(i, 2) = mean(mean(frame_c));
+    end
+else
+    data = FlirMovieReader([path file]);
+    while ~isDone(data)
+        [frame, metadata] = step(data);
+        frame_r = imRotateCrop(frame, angle);
+        d = 25;         % Adjust this number to fix cropping in x direction
+        frame_c = frame_r(rect(2):rect(2)+rect(4), rect(1)+d:rect(1)+rect(3));
+    %     frame_s = frame_c(rect2(2):rect2(2)+rect2(4), rect2(1):rect2(1)+rect2(3));
+
+        timelapse_raw(:,:,i) = frame;
+        timelapse_cropped(:,:,i) = frame_c;
+        MaxTemp(i, 1) = max(max(frame));
+        MaxTemp(i, 2) = max(max(frame_c));
+    %     MaxTemp(i, 3) = max(max(frame_s));
+
+        MeanTemp(i, 1) = mean(mean(frame));
+        MeanTemp(i, 2) = mean(mean(frame_c));
+    %     MeanTemp(i, 3) = mean(mean(frame_s));
+
+        i = i+1;
+    end
 end
+
 
 % if repeat, uncomment following
 % clear timelapse_raw timelapse_cropped MaxTemp MeanTemp
@@ -104,40 +154,62 @@ d_px = d/12.05; % px/mm; Enter measured diameter
 
 %% Fine-tune segmentation
 
-% low
-close all
-I =  timelapse_cropped(:,:, 20);
-var_low = [0.59, 3, 400];
-[~, var_low(4), var_low(5)] = segment_image_low(I, 'debug', var_low);
+if strcmp(file_type, 'ptw')
+    % low
+    close all
+    I =  timelapse_cropped(:,:, 20);
+    var_low = [0.59, 3, 400];
+    [~, var_low(4), var_low(5)] = segment_image_low(I, 'debug', var_low);
 
-%%
-% mid
-close all
-I =  timelapse_cropped(:,:, 80);
-var_mid = [0.59, 3, 400, var_low(4), var_low(5)];
-segment_image_mid(I, 'debug', var_mid);
+    %%
+    % mid
+    close all
+    I =  timelapse_cropped(:,:, 80);
+    var_mid = [0.59, 3, 400, var_low(4), var_low(5)];
+    segment_image_mid(I, 'debug', var_mid);
 
-%%
-% high
-close all
-I =  timelapse_cropped(:,:, 2000);
-var_high = {0.6, 3, 30, var_low(4), var_low(5)};
-[~, var_high{6}, var_high{7}] = segment_image_high(I, 'debug', var_high);
+    %%
+    % high
+    close all
+    I =  timelapse_cropped(:,:, 2000);
+    var_high = {0.6, 3, 30, var_low(4), var_low(5)};
+    [~, var_high{6}, var_high{7}] = segment_image_high(I, 'debug', var_high);
+
+elseif strcmp(file_type, 'jpg')
+    close all
+    I =  timelapse_cropped(:,:, 20);
+    var = [0.59, 3, 400];
+    figure, imshow(I);
+    sprintf('Please click the centre of the sample\nPress Enter to continue...')
+    pause()
+    [x, y] = ginput(1);
+    var(4) = y; var(5) = x;
+end
+
 
 %% Process images
 
-for i = 1:size(timelapse_cropped, 3)
-   I = timelapse_cropped(:,:, i);
-   if i <=45        % Frame where the sample and bck is the same temp. Gray image
-       I_seg(:,:,i) = segment_image_low(I, 'normal', var_low);
-   elseif i <=140 && i > 45         % 
-       I_seg(:,:,i) = segment_image_mid(I, 'normal', var_mid);
-   else
-       I_seg(:,:,i) = segment_image_high(I, 'normal', var_high);
-   end
-   [vol(i), area(i)] = region_volume(I_seg(:,:,i), h_px, d_px);
-   
+if strcmp(file_type, 'ptw')
+    for i = 1:size(timelapse_cropped, 3)
+       I = timelapse_cropped(:,:, i);
+       if i <=45        % Frame where the sample and bck is the same temp. Gray image
+           I_seg(:,:,i) = segment_image_low(I, 'normal', var_low);
+       elseif i <=140 && i > 45         % 
+           I_seg(:,:,i) = segment_image_mid(I, 'normal', var_mid);
+       else
+           I_seg(:,:,i) = segment_image_high(I, 'normal', var_high);
+       end
+       [vol(i), area(i)] = region_volume(I_seg(:,:,i), h_px, d_px);
+
+    end
+elseif strcmp(file_type, 'jpg')
+    for i = 1:size(timelapse_cropped, 3)
+        I = timelapse_cropped(:,:, i);
+        I_seg(:,:,i) = segment_image_mid(I, 'normal', var);
+        [vol(i), area(i)] = region_volume(I_seg(:,:,i), h_px, d_px);
+    end 
 end
+
 
 % figure, imshow(I_seg(:,:, 150))
 
@@ -169,7 +241,7 @@ while(flag)
 end
 % close all
 clear flag i
-
+close all
 
 %% Calculate porosity
 
