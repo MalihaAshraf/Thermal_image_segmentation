@@ -37,9 +37,9 @@ if (strcmp(mode, 'debug'))
     out = I;
 else
     y = round(var(4)); x = round(var(5));
-    I = imdilate(imfill(imfill(bwareaopen(imerode(imcomplement(imbinarize...
+    I = imdilate(imfill(bwareaopen(imerode(imcomplement(imbinarize...
     (imadjust(medfilt2(im2double(img))), 'adapt', 'Sensitivity', var(1))),... 
-    se), var(3)), [y, x] ), [y, x]), se);
+    se), var(3)), [y, x]), se);
     
     
     out = I;

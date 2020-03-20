@@ -8,6 +8,16 @@ function [out, y2, x2] = segment_image_high(img, mode, var)
 %       no. of pixels = 400
 % var = [sensitivity, erosion, no. of pixels
 
+
+sz = size(img);
+sample = mean( mean(img(sz(1)-6:sz(1)-2), round(sz(2)/2-2):(round(sz(2)/2+2))));
+bck = mean(mean(img( 2:6, round(sz(2)/2-2):(round(sz(2)/2+2)))));
+
+if sample < bck
+   img = imcomplement(img); 
+end
+
+
 y = round(var{4}); x = round(var{5});
 se = strel('disk', var{2});
 se2 = strel('disk',4);
