@@ -1,4 +1,4 @@
-function [vol, area, img2] = region_volume(img, h_px, d_px, t)
+function [vol, area, d_l, img2] = region_volume(img, h_px, d_px, t)
 %UNTITLED2 Summary of this function goes here
 %   Detailed explanation goes here
 
@@ -8,6 +8,7 @@ if nargin <=2
     return
 elseif nargin == 3
     mode = 'volume';
+    d_l = NaN;
 elseif nargin == 4
     mode = 'diffusion';
     img2 = NaN;
@@ -69,17 +70,24 @@ elseif strcmp(mode, 'diffusion') % Diffusion skin mode
 
     n_f = t(1);
     t_d = t(2);
-    D = 6.77e-13;
-
-    if n_f >= round(98 - t_d)
-        n_f(2) = n_f - round(98 - t_d) + 1;
-    %     d_l(1) = sqrt((n_f*60)*D)*1000; % in mm
-    %     d_l_px(1) = d_l*d_px;
+    d_l_prev = t(3); % in mm
+    
+    T = (n_f + t_d)*10;
+    if T >= 1000
+        T = 1000;
     end
+    T = T + 273.15;
+    
+    % diffusion value
+    cw = 0.18;  P = 0.000101325; % diffusion parameters
+    D = diff_val(T, cw, P);
+%     D = 6.77e-13;
+    
+    % Diffusion length
+    d_l = (sqrt(D*60)*1000) + d_l_prev; % in mm
+    d_l_px = d_l*d_px;    % in no. of pixels
 
-    d_l = sqrt((n_f*60)*D)*1000; % in mm
-    d_l_px = d_l*d_px;
-
+    
     for j = 1:length(d_l)
         se = strel('disk', round(d_l_px(j)), 8);
         img_v{j} = imerode(img_rs, se);
@@ -107,11 +115,6 @@ elseif strcmp(mode, 'diffusion') % Diffusion skin mode
             vol(j) = NaN;
             area(j) = NaN;
         end
-    end
-    
-    if length(d_l) < 2
-        vol(2) = NaN;
-        area(2) = NaN;
     end
 
 

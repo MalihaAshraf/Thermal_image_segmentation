@@ -216,14 +216,14 @@ if strcmp(file_type, 'ptw')
        else
            I_seg(:,:,i) = segment_image_high(I, 'normal', var_high);
        end
-       [vol(i), area(i), I_seg(:,:,i)] = region_volume(I_seg(:,:,i), h_px, d_px);
+       [vol(i), area(i), ~, I_seg(:,:,i)] = region_volume(I_seg(:,:,i), h_px, d_px);
 
     end
 elseif strcmp(file_type, 'jpg')
     for i = 1:size(timelapse_cropped, 3)
         I = timelapse_cropped(:,:, i);
         I_seg1(:,:,i) = segment_image_high(I, 'normal', var);
-        [vol(i), area(i), I_seg(:,:,i)] = region_volume(I_seg(:,:,i), h_px, d_px);
+        [vol(i), area(i), ~, I_seg(:,:,i)] = region_volume(I_seg(:,:,i), h_px, d_px);
     end 
 end
 
@@ -233,9 +233,15 @@ end
 
 %% Calculating diffusion skin and inner core volume etc
 
-t_d = 6.5;
+t_d = 6.5; % Initial temperature/10
 for i = 1:size(I_seg, 3)
-   [vol_d(i), area_d(i)] = region_volume( I_seg1(:,:,i), h_px, d_px, [i, t_d]);
+    if i == 1
+        d_l_prev = 0;
+    else
+        d_l_prev = d_l(i-1);
+    end
+    
+   [vol_d(i), area_d(i), d_l(i)] = region_volume( I_seg1(:,:,i), h_px, d_px, [i, t_d, d_l_prev]);
 end
 
 
