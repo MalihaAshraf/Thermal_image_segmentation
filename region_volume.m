@@ -1,6 +1,12 @@
 function [vol, area, d_l, img2] = region_volume(img, h_px, d_px, t)
-%UNTITLED2 Summary of this function goes here
-%   Detailed explanation goes here
+%REGION_VOLUME calculates volume and surface area for region of interest
+%
+% The function has two modes; 
+% MODE 'VOLUME'
+%   input arguments:
+%  
+% MODE 'DIFFUSION'
+%   
 
 % Determine if diffusion skin volume needs to be calculated
 if nargin <=2 
@@ -17,21 +23,26 @@ elseif nargin > 4
     return
 end
 
-
+sz = size(img);
 
 if strcmp(mode, 'volume') % Inner volume mode
    
     % Shave off base
-    sz = size(img);
+    
     ind1 = find(img(:, 1:5));
     ind2 = find(img(:, sz(2)-4:end));
     [i1, ~] = ind2sub([sz(1), 5], ind1);
     [i2, ~] = ind2sub([sz(1), 5], ind2);
     r = sort([i1;i2]);
-    r = round(mean(r(1:5)));
+    r = floor(mean(r(1:5)));
 
     img2 = img;
     img2(r:end, :) = 0;
+    
+    % removing base crap
+    se = strel('disk', 1);
+    img2 = imerode(img2, se);
+    img2 = imdilate(img2, se);
     
     
     % Calculating volume and area
@@ -64,6 +75,15 @@ elseif strcmp(mode, 'diffusion') % Diffusion skin mode
     
     % Diffusion length
     rs_f = 10; % resiszing parameter
+    if (sz(1) <=100) && (sz(2) <=100)
+       rs_f = 20;
+    elseif (sz(1) <=500) && (sz(2) <=500)
+        rs_f = 4;
+    elseif (sz(1) <=1000) && (sz(2) <=1000)
+        rs_f = 2;
+    else
+        rs_f = 1;
+    end
     img_rs = imresize(img, rs_f);
     d_px = d_px * rs_f;
     h_px = h_px * rs_f;
@@ -84,7 +104,10 @@ elseif strcmp(mode, 'diffusion') % Diffusion skin mode
 %     D = 6.77e-13;
     
     % Diffusion length
-    d_l = (sqrt(D*60)*1000) + d_l_prev; % in mm
+    d_l_iso = sqrt(D*n_f*60)*1000;
+    d_l_min = sqrt(D*((n_f*60)-60))*1000;
+    d_l = (d_l_iso - d_l_min) + d_l_prev; % in mm
+    
     d_l_px = d_l*d_px;    % in no. of pixels
 
     

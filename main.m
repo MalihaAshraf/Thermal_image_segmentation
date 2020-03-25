@@ -72,7 +72,7 @@ close all
 clear frame metadata frame_r
 
 %% show uncropped images
-idx = 150;
+idx = 500;
 if strcmp(file_type, 'jpg')
     frame = rgb2gray(imread(fullfile(files(idx).folder, files(idx).name)));
     clear ref
@@ -185,14 +185,14 @@ if strcmp(file_type, 'ptw')
     %%
     % high
     close all
-    I =  timelapse_cropped(:,:, 1500);
+    I =  timelapse_cropped(:,:, 500);
     var_high = {0.59, 1, 500, var_low(4), var_low(5)};
     [~, var_high{6}, var_high{7}] = segment_image_high(I, 'debug', var_high);
 
 elseif strcmp(file_type, 'jpg')
     close all
     I =  timelapse_cropped(:,:, 500);
-    var = {0.59, 2, 800};
+    var = {0.59, 2, 1000};
     figure, imshow(I);
     sprintf('Please click the centre of the sample\nPress Enter to continue...')
     pause()
@@ -222,7 +222,7 @@ if strcmp(file_type, 'ptw')
 elseif strcmp(file_type, 'jpg')
     for i = 1:size(timelapse_cropped, 3)
         I = timelapse_cropped(:,:, i);
-        I_seg1(:,:,i) = segment_image_high(I, 'normal', var);
+        I_seg(:,:,i) = segment_image_high(I, 'normal', var);
         [vol(i), area(i), ~, I_seg(:,:,i)] = region_volume(I_seg(:,:,i), h_px, d_px);
     end 
 end
@@ -234,16 +234,18 @@ end
 %% Calculating diffusion skin and inner core volume etc
 
 t_d = 6.5; % Initial temperature/10
+ tic
 for i = 1:size(I_seg, 3)
     if i == 1
         d_l_prev = 0;
     else
         d_l_prev = d_l(i-1);
     end
+   
+   [vol_d(i), area_d(i), d_l(i)] = region_volume( I_seg(:,:,i), h_px, d_px, [i, t_d, d_l_prev]);
     
-   [vol_d(i), area_d(i), d_l(i)] = region_volume( I_seg1(:,:,i), h_px, d_px, [i, t_d, d_l_prev]);
 end
-
+toc
 
 %% Check rubbish images
 
@@ -328,7 +330,7 @@ xlabel('Time in minutes')
 ylabel('Volume')
 hold off
 
-
+%%
 figure, scatter(t, p, 3)
 xlabel('Time in minutes')
 ylabel('Porosity %')
