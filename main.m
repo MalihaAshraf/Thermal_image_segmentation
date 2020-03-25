@@ -7,7 +7,7 @@ file_type = 'jpg'; % options: jpg, ptw
 
 if strcmp(file_type, 'jpg')
     % Browse to directory
-    path = uigetdir('*.*')
+    path = uigetdir('*.*');
 elseif strcmp(file_type, 'ptw')
     % Browse to file
     [file,path] = uigetfile('*.*');
@@ -204,9 +204,8 @@ elseif strcmp(file_type, 'jpg')
 end
 
 
-%% Process images
+%% Process images and calculate outer volume and surface area
 
-t_d = 6.5;
 if strcmp(file_type, 'ptw')
     for i = 1:size(timelapse_cropped, 3)
        I = timelapse_cropped(:,:, i);
@@ -217,19 +216,27 @@ if strcmp(file_type, 'ptw')
        else
            I_seg(:,:,i) = segment_image_high(I, 'normal', var_high);
        end
-       [I_seg(:,:,i), vol(i), area(i)] = region_volume(I_seg(:,:,i), h_px, d_px);
+       [vol(i), area(i), I_seg(:,:,i)] = region_volume(I_seg(:,:,i), h_px, d_px);
 
     end
 elseif strcmp(file_type, 'jpg')
     for i = 1:size(timelapse_cropped, 3)
         I = timelapse_cropped(:,:, i);
         I_seg1(:,:,i) = segment_image_high(I, 'normal', var);
-        [I_seg(:,:,i), vol(i), area(i), vol_d(i, :), area_d(i, :)] = region_volume(I_seg1(:,:,i), h_px, d_px, [i, t_d]);
+        [vol(i), area(i), I_seg(:,:,i)] = region_volume(I_seg(:,:,i), h_px, d_px);
     end 
 end
 
 
 % figure, imshow(I_seg(:,:, 150))
+
+
+%% Calculating diffusion skin and inner core volume etc
+
+t_d = 6.5;
+for i = 1:size(I_seg, 3)
+   [vol_d(i), area_d(i)] = region_volume( I_seg1(:,:,i), h_px, d_px, [i, t_d]);
+end
 
 
 %% Check rubbish images
