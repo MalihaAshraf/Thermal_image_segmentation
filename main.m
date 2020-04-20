@@ -3,7 +3,7 @@
 clear all; close all
 addpath('FLIR_class');
 
-file_type = 'jpg'; % options: jpg, ptw
+file_type = 'ptw'; % options: jpg, ptw
 
 if strcmp(file_type, 'jpg')
     % Browse to directory
@@ -32,7 +32,7 @@ elseif strcmp(file_type, 'ptw')
     nframes = double(vars.numFrames);
     clear vars
     
-    [frame, ~] = read(data, 2);
+    [frame, ~] = read(data, 20);
 end
 
 
@@ -72,7 +72,7 @@ close all
 clear frame metadata frame_r
 
 %% show uncropped images
-idx = 500;
+idx = 2000;
 if strcmp(file_type, 'jpg')
     frame = rgb2gray(imread(fullfile(files(idx).folder, files(idx).name)));
     clear ref
@@ -144,9 +144,10 @@ MeanTemp(:,:,sel) = [];
 
 %% Initialize variables (sample dimensions)
 
+clear timelapse_raw
 sprintf('Please click the top and bottom points of the sample\nPress Enter to continue...')
 pause()
-n = 10;          % Select the frame with correct initial height and width
+n = 50;          % Select the frame with correct initial height and width
 figure, imshow(timelapse_cropped(:,:,n), [])
 [x, y] = ginput(2);
 close all
@@ -154,7 +155,7 @@ h = abs(y(2)-y(1));
 
 sprintf('Please click the right and left points of the sample\nPress Enter to continue...')
 pause()
-n = 10;          % Select the frame with correct initial height and width
+n = 50;          % Select the frame with correct initial height and width
 figure, imshow(timelapse_cropped(:,:,n), [])
 [x, y] = ginput(2);
 close all
@@ -162,8 +163,8 @@ d = abs(x(2)-x(1));
 
 clear n x y
 
-h_px = h/1.79; % px/mm; Enter measured height
-d_px = d/2.92; % px/mm; Enter measured diameter
+h_px = h/7.60; % px/mm; Enter measured height
+d_px = d/7.55; % px/mm; Enter measured diameter
 
 
 %% Fine-tune segmentation
@@ -172,22 +173,22 @@ if strcmp(file_type, 'ptw')
     % low
     close all
     I =  timelapse_cropped(:,:, 30);
-    var_low = [0.62, 2, 300];
+    var_low = [0.6, 1, 500];
     [~, var_low(4), var_low(5)] = segment_image_low(I, 'debug', var_low);
 
     %%
     % mid
     close all
-    I =  timelapse_cropped(:,:, 140);
-    var_mid = [0.59, 1, 500, var_low(4), var_low(5)];
-    segment_image_mid(I, 'debug', var_mid);
+    I =  timelapse_cropped(:,:, 80);
+    var_mid = [0.65, 1, 3500, var_low(4), var_low(5)];
+    [~, var_mid] = segment_image_mid(I, 'debug', var_mid);
 
     %%
     % high
     close all
     I =  timelapse_cropped(:,:, 500);
-    var_high = {0.59, 1, 500, var_low(4), var_low(5)};
-    [~, var_high{6}, var_high{7}] = segment_image_high(I, 'debug', var_high);
+    var_high = {0.62, 2, 100, var_low(4), var_low(5)};
+    [~, var_high] = segment_image_high(I, 'debug', var_high);
 
 elseif strcmp(file_type, 'jpg')
     close all
@@ -206,24 +207,26 @@ end
 
 %% Process images and calculate outer volume and surface area
 
+remove_base = true;
+
 if strcmp(file_type, 'ptw')
     for i = 1:size(timelapse_cropped, 3)
        I = timelapse_cropped(:,:, i);
-       if i <=30        % Frame where the sample and bck is the same temp. Gray image
+       if i <=40        % Frame where the sample and bck is the same temp. Gray image
            I_seg(:,:,i) = segment_image_low(I, 'normal', var_low);
-       elseif i <=140 && i > 30         % 
+       elseif i <=110 && i > 40         % 
            I_seg(:,:,i) = segment_image_mid(I, 'normal', var_mid);
        else
            I_seg(:,:,i) = segment_image_high(I, 'normal', var_high);
        end
-       [vol(i), area(i), ~, I_seg(:,:,i)] = region_volume(I_seg(:,:,i), h_px, d_px);
+       [vol(i), area(i), ~, I_seg(:,:,i)] = region_volume(I_seg(:,:,i), h_px, d_px, remove_base);
 
     end
 elseif strcmp(file_type, 'jpg')
     for i = 1:size(timelapse_cropped, 3)
         I = timelapse_cropped(:,:, i);
         I_seg(:,:,i) = segment_image_high(I, 'normal', var);
-        [vol(i), area(i), ~, I_seg(:,:,i)] = region_volume(I_seg(:,:,i), h_px, d_px);
+        [vol(i), area(i), ~, I_seg(:,:,i)] = region_volume(I_seg(:,:,i), h_px, d_px, remove_base);
     end 
 end
 
@@ -233,16 +236,33 @@ end
 
 %% Calculating diffusion skin and inner core volume etc
 
-t_d = 6.5; % Initial temperature/10
+t_d = 6.4; % Initial temperature/10
  tic
-for i = 1:size(I_seg, 3)
-    if i == 1
-        d_l_prev = 0;
+ t_iso = 60;
+for i = 1:400%size(I_seg, 3)
+    i
+    if isnan(vol(i))
+        t_iso = t_iso + 60;
+        vol_d(i, :) = [NaN, NaN, NaN];
+        area_d(i, :) = [NaN, NaN];
+        d_l(i, :)= [NaN, NaN, NaN];
+        continue
     else
-        d_l_prev = d_l(i-1);
+        t_iso_prev = t_iso;
+        t_iso = 60;
+        n = t_iso_prev/60;
     end
    
-   [vol_d(i), area_d(i), d_l(i)] = region_volume( I_seg(:,:,i), h_px, d_px, [i, t_d, d_l_prev]);
+    if i == 1
+        d_l_prev = [0, 0];
+        d_v_prev = [0, 0];
+    else
+        d_l_prev = [d_l(i-n, 1), d_l(i-n, 2)];
+        d_v_prev = [vol(i-n) - vol_d(i-n, 1), vol(i-n) - vol_d(i-n, 2)];
+    end
+    
+   [vol_d(i, :), area_d(i,:), d_l(i, :), ~, d_flag(i, :)] = region_volume( I_seg(:,:,i), h_px, d_px, remove_base,... 
+       [i, t_d, t_iso_prev, d_l_prev, d_v_prev, vol(i)]);
     
 end
 toc
@@ -278,7 +298,7 @@ close all
 
 %% Calculate porosity
 
-vol_pyc = 0.0112;
+vol_pyc = 0.3357;
 vol_init = mean(vol(sel2));
 display(['Calculated volume: ' num2str(vol_init)]);
 
@@ -321,16 +341,14 @@ v2 = 100*vol_init./(100-p2);
 
 %% Plots
 
-figure, scatter(t, (vol'-vol_d(:,1)), 3)
-hold on
-scatter(t, (vol'-vol_d(:,2)), 3)
+figure, scatter(t(1:292), (vol_d(1:292,1)'), 3)
 hold on
 scatter(t, vol, 3)
+scatter(t(1:292), (vol_d(1:292,2)'), 3)
 xlabel('Time in minutes')
 ylabel('Volume')
 hold off
 
-%%
 figure, scatter(t, p, 3)
 xlabel('Time in minutes')
 ylabel('Porosity %')
@@ -353,13 +371,19 @@ ylabel('Surface area cm^2')
 
 %% Save data as CSV
 
+% Path for exported data
+path = uigetdir('*.*');
+
 % Data with outliers
 ds1 = dataset();
 ds1.Time = t';
 ds1.Volume = vol';
 ds1.Porosity = p';
 ds1.Surface_Area = area';
-export(ds1, 'file', 'Furnace_data_with_outliers.csv', 'Delimiter', ',');
+ds1.Core_Volume = vol_d';
+ds1.Core_Surf_Area = area_d';
+ds1.Diffusion_Length = d_l';
+export(ds1, 'file', fullfile(path, 'Furnace_data_with_outliers.csv'), 'Delimiter', ',');
 
 % Data without outliers
 ds2 = dataset();
@@ -367,12 +391,15 @@ ds2.Time = t(~outliers)';
 ds2.Volume = vol(~outliers)';
 ds2.Porosity = p(~outliers)';
 ds2.Surface_Area = area(~outliers)';
-export(ds2, 'file', 'Furnace_data_without_outliers2.csv', 'Delimiter', ',');
+ds2.Core_Volume = vol_d(~outliers)';
+ds2.Core_Surf_Area = area_d(~outliers)';
+ds2.Diffusion_Length = d_l(~outliers)';
+export(ds2, 'file', fullfile(path,'Furnace_data_without_outliers.csv'), 'Delimiter', ',');
 
 % Furnace data model fits
 ds3 = dataset();
 ds3.Time = t';
 ds3.Volume = v2;
 ds3.Porosity = p2;
-export(ds3, 'file', 'Furnace_data_model2.csv', 'Delimiter', ',');
+export(ds3, 'file', fullfile(path,'Furnace_data_model.csv'), 'Delimiter', ',');
 

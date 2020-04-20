@@ -1,4 +1,4 @@
-function out = segment_image_mid(img, mode, var)
+function [out, var] = segment_image_mid(img, mode, var)
 %UNTITLED4 Summary of this function goes here
 %   Detailed explanation goes here
 
@@ -9,18 +9,32 @@ function out = segment_image_mid(img, mode, var)
 %       no. of pixels = 400
 % var = [sensitivity, erosion, no. of pixels
 
-sz = size(img);
-sample = mean( mean(img(sz(1)-6:sz(1)-2), round(sz(2)/2-2):(round(sz(2)/2+2))));
-bck = mean(mean(img( 2:6, round(sz(2)/2-2):(round(sz(2)/2+2)))));
+% sz = size(img);
+% sample = mean( mean(img(sz(1)-6:sz(1)-2), round(sz(2)/2-2):(round(sz(2)/2+2))));
+% bck = mean(mean(img( 2:6, round(sz(2)/2-2):(round(sz(2)/2+2)))));
 
-if sample < bck
-   img = imcomplement(img); 
+if (strcmp(mode, 'debug'))
+    sample = area_mean_value(img, 'Select an area from the sample'); 
+    bck = area_mean_value(img, 'Select an area from background');
+    if sample < bck
+        var(6) = 1;
+    else
+        var(6) = 0;
+    end   
+end
+
+if var(6)
+    img_old = img;
+    img = imcomplement(img); 
+else
+    img_old = img;
 end
 
 y = round(var(4)); x = round(var(5));
 se = strel('disk', var(2));
 
 if (strcmp(mode, 'debug'))
+    figure, imshow(img_old, []), title('Original image')
     figure, imshow(img, [])
     I1 = imbinarize(imadjust(medfilt2(im2double(img))), 'adapt', 'Sensitivity', var(1));
     figure, imshow(I1), title('1. binarize')
