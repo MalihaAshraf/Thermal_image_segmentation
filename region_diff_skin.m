@@ -1,4 +1,4 @@
-function [vol, area, d_l, img_d] = region_diff_skin(img, shape, h_px, d_px, t)
+function [vol, area, d_l, strain, img_d] = region_diff_skin(img, shape, h_px, d_px, t)
 %REGION_VOLUME calculates volume and surface area for region of interest
 %
 %   input arguments:
@@ -22,7 +22,7 @@ function [vol, area, d_l, img_d] = region_diff_skin(img, shape, h_px, d_px, t)
 sz = size(img);
 
 % Diffusion length
-rs_f = 200; % resiszing parameter
+rs_f = 150; % resiszing parameter
 %     if (sz(1) <=100) && (sz(2) <=100)
 %        rs_f = 200;
 %     elseif (sz(1) <=500) && (sz(2) <=500)
@@ -83,13 +83,19 @@ d_l(3) = (d_l_iso - d_l_gap);
 d_l(1) =  d_l(3) + d;
 d_l_px = (d_l(1) * d_px);
 d_l(4) = (d_l_px);
-[vol, area, img_c] = calc_diff_core(img_rs, d_l_px, h_px, d_px);
-img_d = imresize(img_rs - img_c, 1/rs_f);
+
+if 0%~mod(n_f, 20)
+    [vol, area, img_c] = calc_diff_core(img_rs, d_l(1), h_px, d_px, 'img');
+    img_d = imresize(img_rs - img_c, 1/rs_f);
+else
+    [vol, area, ~] = calc_diff_core(img_rs, d_l(1), h_px, d_px, '');
+    img_d = NaN;
+end
 
 end
 
 %% Helper functions
-function [vol, area] = calc_3d_dims_img(img, h_px, d_px)
+function [vol, area] = calc_3d_dims_img(img, h_px, d_px, d_l)
 %UNTITLED Summary of this function goes here
 %   Detailed explanation goes here
   h = 0;
@@ -98,17 +104,21 @@ function [vol, area] = calc_3d_dims_img(img, h_px, d_px)
         if (find(img(rr, :)))
             h = h+1;
             d(h) = numel((find(img(rr, :))))/d_px;
-            r(h) = d(h)/2;
+            r(h) = (d(h)/2) - d_l;
             v(h) = pi*((r(h))^2);
             p(h) = 2*pi*r(h);
         end
     end
 
     if ~isempty(v)
-        vol = (sum(v)/h_px)/1000;
-        top = pi*r(1)^2/100;
-        bottom = pi*r(end)^2/100;
-        area = (sum(p)/h_px)/100;
+        % accounting for top and bottom
+        d_l_px = d_l*d_px;
+        h_d = round(d_l_px);
+        
+        vol = (sum(v(h_d+1:end-h_d))/h_px)/1000;
+        top = pi*r(h_d+1)^2/100;
+        bottom = pi*r(end-h_d)^2/100;
+        area = (sum(p(h_d+1:end-h_d))/h_px)/100;
         area = area + top + bottom;
     else
         vol = NaN;
@@ -116,12 +126,16 @@ function [vol, area] = calc_3d_dims_img(img, h_px, d_px)
     end
 end
 
-function [vol, area, img_v] = calc_diff_core(img, d_l_px, h_px, d_px)
+function [vol, area, img_v] = calc_diff_core(img, d_l, h_px, d_px, mode)
 
-    se = strel('disk', floor(d_l_px), 8);
-    img_v = imerode(img, se);
-%     img_d = img_rs - img_v;
-
-    [vol, area] = calc_3d_dims_img(img_v, h_px, d_px);
+    [vol, area] = calc_3d_dims_img(img, h_px, d_px, d_l);
+    
+    if strcmp(mode, 'img')
+        d_l_px = d_l * d_px;
+        se = strel('disk', floor(d_l_px), 8);
+        img_v = imerode(img, se);
+    else 
+        img_v = NaN;
+    end    
 
 end

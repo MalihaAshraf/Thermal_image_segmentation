@@ -30,7 +30,7 @@ if strcmp(mode, 'volume') % Inner volume mode
    
     if base_mode
         % Shave off base
-
+        
         ind1 = find(img(:, 1:5));
         ind2 = find(img(:, sz(2)-4:end));
         [i1, ~] = ind2sub([sz(1), 5], ind1);
@@ -52,8 +52,18 @@ if strcmp(mode, 'volume') % Inner volume mode
         se = strel('disk', 1); % size of base pixels remainders
         img2 = imerode(img2, se);
         img2 = imdilate(img2, se);
+     
     else
         img2 = img;
+    end
+    
+    if 1
+        a = regionprops(img2, 'Centroid');
+        if length(a) > 1
+            for i = 2:length(a)
+                img2  = imcomplement(imfill(imcomplement(img2), flip(round(a(i).Centroid))));
+            end
+        end
     end
     
     % Calculating volume and area

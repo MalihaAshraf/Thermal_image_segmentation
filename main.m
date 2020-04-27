@@ -234,39 +234,6 @@ end
 % figure, imshow(I_seg(:,:, 150))
 
 
-%% Calculating diffusion skin and inner core volume etc
-
-t_d = 6.4; % Initial temperature/10
- tic
- t_iso = 60;
-for i = 1:400%size(I_seg, 3)
-    i
-    if isnan(vol(i))
-        t_iso = t_iso + 60;
-        vol_d(i, :) = [NaN, NaN, NaN];
-        area_d(i, :) = [NaN, NaN];
-        d_l(i, :)= [NaN, NaN, NaN];
-        continue
-    else
-        t_iso_prev = t_iso;
-        t_iso = 60;
-        n = t_iso_prev/60;
-    end
-   
-    if i == 1
-        d_l_prev = [0, 0];
-        d_v_prev = [0, 0];
-    else
-        d_l_prev = [d_l(i-n, 1), d_l(i-n, 2)];
-        d_v_prev = [vol(i-n) - vol_d(i-n, 1), vol(i-n) - vol_d(i-n, 2)];
-    end
-    
-   [vol_d(i, :), area_d(i,:), d_l(i, :), ~, d_flag(i, :)] = region_volume( I_seg(:,:,i), h_px, d_px, remove_base,... 
-       [i, t_d, t_iso_prev, d_l_prev, d_v_prev, vol(i)]);
-    
-end
-toc
-
 %% Check rubbish images
 
 flag = 1;
@@ -300,6 +267,7 @@ close all
 
 vol_pyc = 0.3357;
 vol_init = mean(vol(sel2));
+area_init = mean(area(sel2));
 display(['Calculated volume: ' num2str(vol_init)]);
 
 t = 1:nframes;
@@ -314,37 +282,99 @@ p = (vol-vol_init).*100./vol;
 
 % sel3 = ~find(t, sel)
 options = fitoptions('Method','SmoothingSpline',...
-                     'SmoothingParam', 0.001);
-f1 = fit(t(~isnan(p))', p(~isnan(p))','poly9', 'Normalize','on','Robust','Bisquare');
-figure, plot(f1, t, p)
+                     'SmoothingParam', 0.00001);
+bp = [250, 275, 300]; % breaking point between the two curves
+idx1 = (t <= bp(3)) & ~isnan(p);
+idx2 = (t >= bp(1)) & ~isnan(p);
+            
+f1 = fit(t(idx1)', p(idx1)','poly7', 'Normalize','on','Robust','Bisquare');
+f2 = fit(t(idx2)', p(idx2)','poly7', 'Normalize','on','Robust','Bisquare');
+
+% f1 = fit(t(~isnan(p))', p(~isnan(p))',...
+%     'cubicsp', options);
+
+fata = p;
+fdata(1:bp(2)) = feval(f1, t(1:bp(2)));
+fdata(bp(2)+1:end) = feval(f2, t(bp(2)+1:end));
+
+figure, scatter(t, p, 3, 'b', 'filled')
+hold on
+plot(t, fdata, 'r', 'LineWidth', 1)
 title('Fit with outliers')
 ylim([0 100])
 
 % identify outliers based on fits
-fdata = feval(f1, t);
-out_p = 1.7; %outlier parameter
-err = abs(fdata - p') > out_p*std(p');
+[~,distance,~] = distance2curve( cat(2, t', fdata), cat(2, t', p'));
+e = 5; % error tolerance
+err = distance > e;
 outliers = excludedata(t, p, 'indices', err);
 
-f2 = fit(t(~isnan(p))', p(~isnan(p))', 'poly5', 'Normalize','on','Robust','Bisquare',...
-    'Exclude', outliers(~isnan(p)));
-
-figure, plot(f2, t(~outliers), p(~outliers))
+figure, scatter(t(~outliers), p(~outliers), 3, 'b', 'filled')
+hold on
+plot(t, fdata, 'r', 'LineWidth', 1)
 title('Fit without outliers')
-
 ylim([0 100])
 
 % Model values
-p2 = feval(f2, t);
+% p2 = feval(f2, t);
+p2 = fdata;
 v2 = 100*vol_init./(100-p2);
+
+%% Calculating diffusion skin and inner core volume etc
+
+t_d = 6.4; % Initial temperature/10
+tic
+t_iso = 60;
+vol_d = NaN*ones(nframes, 1);
+vol_c = NaN*ones(nframes, 1);
+area_c = NaN*ones(nframes, 1);
+d_l = NaN*ones(nframes, 4);
+strain = NaN*ones(nframes, 1);
+img_d = cell(nframes, 1);
+
+for i =1:size(I_seg, 3)
+    i
+    if isnan(vol(i)) || outliers(i)
+        t_iso = t_iso + 60;
+        vol_d(i, :) = NaN;
+        vol_c(i, :) = NaN;
+        area_c(i, :) = NaN;
+        d_l(i, :)= [NaN, NaN , NaN, NaN];
+        strain(i, :) = NaN;
+        img_d{i} = NaN;
+        continue
+    else
+        t_iso_prev = t_iso;
+        t_iso = 60;
+        n = t_iso_prev/60;
+    end
+   
+    if i == 1
+%         d_l_prev = 0;
+        d_v_prev = 0;
+        area_prev = area_init;
+    else
+%         d_l_prev = d_l(i-n, 1);
+        d_v_prev = vol_d(i-n);
+        area_prev = area(i-n);
+    end
+    
+   [vol_c(i, :), area_c(i, :), d_l(i, :), strain(i, :), img_d{i}] =... 
+       region_diff_skin( I_seg(:,:,i), 'cyl', h_px, d_px,... 
+       [i, t_d, t_iso_prev, d_v_prev, area_prev, area(i)]);
+    vol_d(i, :) = vol(i) - vol_c(i, :);
+end
+toc
+
+
 
 
 %% Plots
 
-figure, scatter(t(1:292), (vol_d(1:292,1)'), 3)
+figure, scatter(t, (vol_d'), 3)
 hold on
 scatter(t, vol, 3)
-scatter(t(1:292), (vol_d(1:292,2)'), 3)
+scatter(t, (vol_d'), 3)
 xlabel('Time in minutes')
 ylabel('Volume')
 hold off
@@ -381,7 +411,7 @@ ds1.Volume = vol';
 ds1.Porosity = p';
 ds1.Surface_Area = area';
 ds1.Core_Volume = vol_d';
-ds1.Core_Surf_Area = area_d';
+ds1.Core_Surf_Area = area_c';
 ds1.Diffusion_Length = d_l';
 export(ds1, 'file', fullfile(path, 'Furnace_data_with_outliers.csv'), 'Delimiter', ',');
 
@@ -392,7 +422,7 @@ ds2.Volume = vol(~outliers)';
 ds2.Porosity = p(~outliers)';
 ds2.Surface_Area = area(~outliers)';
 ds2.Core_Volume = vol_d(~outliers)';
-ds2.Core_Surf_Area = area_d(~outliers)';
+ds2.Core_Surf_Area = area_c(~outliers)';
 ds2.Diffusion_Length = d_l(~outliers)';
 export(ds2, 'file', fullfile(path,'Furnace_data_without_outliers.csv'), 'Delimiter', ',');
 
