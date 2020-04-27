@@ -1,4 +1,4 @@
-function [vol, area, d_l, img2, d_flag] = region_volume(img, h_px, d_px, base_mode, t)
+function [vol, area, d_l, img2] = region_volume(img, h_px, d_px, base_mode, t)
 %REGION_VOLUME calculates volume and surface area for region of interest
 %
 % The function has two modes; 
@@ -73,7 +73,7 @@ if strcmp(mode, 'volume') % Inner volume mode
 elseif strcmp(mode, 'diffusion') % Diffusion skin mode
     
     % Diffusion length
-    rs_f = 100; % resiszing parameter
+    rs_f = 20; % resiszing parameter
 %     if (sz(1) <=100) && (sz(2) <=100)
 %        rs_f = 200;
 %     elseif (sz(1) <=500) && (sz(2) <=500)
@@ -90,9 +90,13 @@ elseif strcmp(mode, 'diffusion') % Diffusion skin mode
     n_f = t(1);
     t_d = t(2);
     t_iso = t(3);
-    d_l_prev = [t(4), t(5)]; % in mm
-    d_v_prev = [t(6), t(7)];
-    v_full = t(8);
+%     d_l_prev = [t(4), t(5)]; % in mm
+%     d_v_prev = [t(6), t(7)];
+%     v_full = t(8);
+    
+    d_l_prev = [t(4)]; % in mm
+    d_v_prev = [t(5)];
+    v_full = t(6);
     
     T = (n_f + t_d)*10;
     if T >= 1000
@@ -114,9 +118,10 @@ elseif strcmp(mode, 'diffusion') % Diffusion skin mode
     
     d_l_px = d_l(1)*d_px;    % in no. of pixels
     
-    [vol(1), area(1)] = calc_diff_core(img_rs, d_l_px, h_px, d_px);
-
+    [vol(1), area(1), img2] = calc_diff_core(img_rs, d_l_px, h_px, d_px);
+    
     % Diffusion length (with shear)
+    if 0
     vol(2) = v_full;
     d_l(2) = 0;
     d_l_px = 0;
@@ -171,7 +176,9 @@ elseif strcmp(mode, 'diffusion') % Diffusion skin mode
 %     
 %     d_l_px = d_l(2) * d_px;
 %     [vol(2), area(2)] = calc_diff_core(img_rs, d_l_px, h_px, d_px);
+    end
     
+    img2 = imresize(img2, 1/rs_f);
 end
 
 end
@@ -204,11 +211,11 @@ function [vol, area] = calc_3d_dims_img(img, h_px, d_px)
     end
 end
 
-function [vol, area] = calc_diff_core(img, d_l_px, h_px, d_px)
+function [vol, area, img_d] = calc_diff_core(img, d_l_px, h_px, d_px)
 
     se = strel('disk', round(d_l_px), 8);
     img_v = imerode(img, se);
-%     img_d = img_rs - img_v;
+    img_d = img - img_v;
 
     [vol, area] = calc_3d_dims_img(img_v, h_px, d_px);
 

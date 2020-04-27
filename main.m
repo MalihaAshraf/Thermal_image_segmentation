@@ -87,6 +87,7 @@ rectangle('Position',rect,...
 
 %% Read frames
 
+clear i timelapse_cropped
 if strcmp(file_type, 'jpg')
     for i = 1:nframes
         frame = (imread(fullfile(files(i).folder, files(i).name)));
@@ -104,21 +105,22 @@ if strcmp(file_type, 'jpg')
     end
 else
     data = FlirMovieReader([path file]);
+    i = 1;
     while ~isDone(data)
         [frame, metadata] = step(data);
         frame_r = imRotateCrop(frame, angle);
-        d = 25;         % Adjust this number to fix cropping in x direction
+        d = 0;         % Adjust this number to fix cropping in x direction
         frame_c = frame_r(rect(2):rect(2)+rect(4), rect(1)+d:rect(1)+rect(3));
     %     frame_s = frame_c(rect2(2):rect2(2)+rect2(4), rect2(1):rect2(1)+rect2(3));
 
         timelapse_raw(:,:,i) = frame;
         timelapse_cropped(:,:,i) = frame_c;
-        MaxTemp(i, 1) = max(max(frame));
-        MaxTemp(i, 2) = max(max(frame_c));
-    %     MaxTemp(i, 3) = max(max(frame_s));
-
-        MeanTemp(i, 1) = mean(mean(frame));
-        MeanTemp(i, 2) = mean(mean(frame_c));
+%         MaxTemp(i, 1) = max(max(frame));
+%         MaxTemp(i, 2) = max(max(frame_c));
+%     %     MaxTemp(i, 3) = max(max(frame_s));
+% 
+%         MeanTemp(i, 1) = mean(mean(frame));
+%         MeanTemp(i, 2) = mean(mean(frame_c));
     %     MeanTemp(i, 3) = mean(mean(frame_s));
 
         i = i+1;
@@ -180,14 +182,14 @@ if strcmp(file_type, 'ptw')
     % mid
     close all
     I =  timelapse_cropped(:,:, 80);
-    var_mid = [0.65, 1, 3500, var_low(4), var_low(5)];
+    var_mid = [0.58, 1, 800, var_low(4), var_low(5)];
     [~, var_mid] = segment_image_mid(I, 'debug', var_mid);
 
     %%
     % high
     close all
     I =  timelapse_cropped(:,:, 500);
-    var_high = {0.62, 2, 100, var_low(4), var_low(5)};
+    var_high = {0.585, 3, 200, var_low(4), var_low(5)};
     [~, var_high] = segment_image_high(I, 'debug', var_high);
 
 elseif strcmp(file_type, 'jpg')
@@ -284,16 +286,16 @@ p = (vol-vol_init).*100./vol;
 options = fitoptions('Method','SmoothingSpline',...
                      'SmoothingParam', 0.00001);
 bp = [250, 275, 300]; % breaking point between the two curves
-idx1 = (t <= bp(3)) & ~isnan(p);
-idx2 = (t >= bp(1)) & ~isnan(p);
+idx1 = (t <= bp(3)) & ~isnan(p) & (p > 0);
+idx2 = (t >= bp(1)) & ~isnan(p) & (p > 0);
             
 f1 = fit(t(idx1)', p(idx1)','poly7', 'Normalize','on','Robust','Bisquare');
-f2 = fit(t(idx2)', p(idx2)','poly7', 'Normalize','on','Robust','Bisquare');
+f2 = fit(t(idx2)', p(idx2)','poly9', 'Normalize','on','Robust','Bisquare');
 
 % f1 = fit(t(~isnan(p))', p(~isnan(p))',...
 %     'cubicsp', options);
 
-fata = p;
+fdata = p;
 fdata(1:bp(2)) = feval(f1, t(1:bp(2)));
 fdata(bp(2)+1:end) = feval(f2, t(bp(2)+1:end));
 
@@ -303,10 +305,12 @@ plot(t, fdata, 'r', 'LineWidth', 1)
 title('Fit with outliers')
 ylim([0 100])
 
+
 % identify outliers based on fits
-[~,distance,~] = distance2curve( cat(2, t', fdata), cat(2, t', p'));
+[~,distance,~] = distance2curve( cat(2, t', fdata'), cat(2, t', p'));
 e = 5; % error tolerance
 err = distance > e;
+err(isnan(distance)) = 1;
 outliers = excludedata(t, p, 'indices', err);
 
 figure, scatter(t(~outliers), p(~outliers), 3, 'b', 'filled')
@@ -325,19 +329,21 @@ v2 = 100*vol_init./(100-p2);
 t_d = 6.4; % Initial temperature/10
 tic
 t_iso = 60;
-vol_d = NaN*ones(nframes, 1);
-vol_c = NaN*ones(nframes, 1);
-area_c = NaN*ones(nframes, 1);
-d_l = NaN*ones(nframes, 4);
-strain = NaN*ones(nframes, 1);
-img_d = cell(nframes, 1);
 
-for i =1:size(I_seg, 3)
+% vol_d = NaN*ones(nframes, 1);
+% vol_c = NaN*ones(nframes, 1);
+% area_c = NaN*ones(nframes, 1);
+% d_l = NaN*ones(nframes, 4);
+% strain = NaN*ones(nframes, 1);
+% img_d = cell(nframes, 1);
+
+for i =957:size(I_seg, 3)
     i
     if isnan(vol(i)) || outliers(i)
         t_iso = t_iso + 60;
         vol_d(i, :) = NaN;
         vol_c(i, :) = NaN;
+        0
         area_c(i, :) = NaN;
         d_l(i, :)= [NaN, NaN , NaN, NaN];
         strain(i, :) = NaN;
@@ -349,20 +355,30 @@ for i =1:size(I_seg, 3)
         n = t_iso_prev/60;
     end
    
-    if i == 1
-%         d_l_prev = 0;
+    if (i == 1) || ( i-n <= 1)
+        d_l_prev = 0;
         d_v_prev = 0;
         area_prev = area_init;
+        v_prev = vol_init;
     else
-%         d_l_prev = d_l(i-n, 1);
+        d_l_prev = d_l(i-n, 1);
         d_v_prev = vol_d(i-n);
         area_prev = area(i-n);
+        v_prev = vol(i-n);
     end
     
+    if 1 % previous method
+        [vol_c(i, :), area_c(i, :), d_l(i, :), img_d{i}] =... 
+            region_volume(I_seg(:,:,i), h_px, d_px, 'diffusion',... 
+            [i, t_d, t_iso_prev, d_l_prev, d_v_prev, v_prev]);
+     vol_d(i, :) = vol(i) - vol_c(i, :);
+    else
+    % think skin method
    [vol_c(i, :), area_c(i, :), d_l(i, :), strain(i, :), img_d{i}] =... 
        region_diff_skin( I_seg(:,:,i), 'cyl', h_px, d_px,... 
        [i, t_d, t_iso_prev, d_v_prev, area_prev, area(i)]);
     vol_d(i, :) = vol(i) - vol_c(i, :);
+    end
 end
 toc
 
@@ -433,3 +449,16 @@ ds3.Volume = v2;
 ds3.Porosity = p2;
 export(ds3, 'file', fullfile(path,'Furnace_data_model.csv'), 'Delimiter', ',');
 
+
+%% Write movie
+
+if 1
+    vid_frames = cell(2, 1);
+    vid_frames{1} = I_seg;
+    vid_frames{2} = img_d;
+else
+    vid_frames = cell(1, 1);
+    vid_frames{1} = I_seg;
+end
+
+writeMovie(vid_frames, timelapse_cropped, outliers, 'test_skin.mp4');
