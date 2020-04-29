@@ -59,7 +59,7 @@ if strcmp(mode, 'volume') % Inner volume mode
     end
     
     if 1
-        a = regionprops(img2, 'Area', 'Centroid', 'MajorAxisLength', 'MinorAxisLength');
+        a = regionprops(img2, 'Area', 'Centroid', 'MajorAxisLength', 'MinorAxisLength', 'PixelIdxList');
         
         if length(a) > 1
             max_area = max(vertcat(a.Area));
@@ -67,9 +67,10 @@ if strcmp(mode, 'volume') % Inner volume mode
                 if a(i).Area >= max_area
                     r_px = mean([d_px, h_px]);
                     ax_l = [a(i).MajorAxisLength, a(i).MinorAxisLength]./r_px;
-                   break 
+                   continue 
                 end
                 img2  = imcomplement(imfill(imcomplement(img2), flip(round(a(i).Centroid))));
+                img2  = imcomplement(imfill(imcomplement(img2), (a(i).PixelIdxList) ));
             end
         elseif length(a) == 1
             r_px = mean([d_px, h_px]);
