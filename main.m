@@ -221,14 +221,14 @@ if strcmp(file_type, 'ptw')
        else
            I_seg(:,:,i) = segment_image_high(I, 'normal', var_high);
        end
-       [vol(i), area(i), ~, I_seg(:,:,i)] = region_volume(I_seg(:,:,i), h_px, d_px, remove_base);
+       [vol(i), area(i), ~, I_seg(:,:,i), ax_l(i, :)] = region_volume(I_seg(:,:,i), h_px, d_px, remove_base);
 
     end
 elseif strcmp(file_type, 'jpg')
     for i = 1:size(timelapse_cropped, 3)
         I = timelapse_cropped(:,:, i);
         I_seg(:,:,i) = segment_image_high(I, 'normal', var);
-        [vol(i), area(i), ~, I_seg(:,:,i)] = region_volume(I_seg(:,:,i), h_px, d_px, remove_base);
+        [vol(i), area(i), ~, I_seg(:,:,i), ax_l(i,:)] = region_volume(I_seg(:,:,i), h_px, d_px, remove_base);
     end 
 end
 
@@ -286,10 +286,12 @@ p = (vol-vol_init).*100./vol;
 options = fitoptions('Method','SmoothingSpline',...
                      'SmoothingParam', 0.00001);
 bp = [250, 275, 300]; % breaking point between the two curves
+bp = [170, 175, 180]; % breaking point between the two curves
+
 idx1 = (t <= bp(3)) & ~isnan(p) & (p > 0);
 idx2 = (t >= bp(1)) & ~isnan(p) & (p > 0);
             
-f1 = fit(t(idx1)', p(idx1)','poly7', 'Normalize','on','Robust','Bisquare');
+f1 = fit(t(idx1)', p(idx1)','exp1', 'Normalize','on','Robust','Bisquare');
 f2 = fit(t(idx2)', p(idx2)','poly9', 'Normalize','on','Robust','Bisquare');
 
 % f1 = fit(t(~isnan(p))', p(~isnan(p))',...
@@ -308,7 +310,7 @@ ylim([0 100])
 
 % identify outliers based on fits
 [~,distance,~] = distance2curve( cat(2, t', fdata'), cat(2, t', p'));
-e = 5; % error tolerance
+e = 2.5; % error tolerance
 err = distance > e;
 err(isnan(distance)) = 1;
 outliers = excludedata(t, p, 'indices', err);
@@ -337,13 +339,12 @@ t_iso = 60;
 % strain = NaN*ones(nframes, 1);
 % img_d = cell(nframes, 1);
 
-for i =957:size(I_seg, 3)
+for i =1:size(I_seg, 3)
     i
     if isnan(vol(i)) || outliers(i)
         t_iso = t_iso + 60;
         vol_d(i, :) = NaN;
         vol_c(i, :) = NaN;
-        0
         area_c(i, :) = NaN;
         d_l(i, :)= [NaN, NaN , NaN, NaN];
         strain(i, :) = NaN;
@@ -386,6 +387,13 @@ toc
 
 
 %% Plots
+
+figure, scatter(t(~outliers), (ax_l(~outliers,1)), 3)
+hold on
+scatter(t(~outliers), ax_l(~outliers,2), 3)
+xlabel('Time in minutes')
+ylabel('Axes length')
+hold off
 
 figure, scatter(t, (vol_d'), 3)
 hold on
@@ -452,7 +460,9 @@ export(ds3, 'file', fullfile(path,'Furnace_data_model.csv'), 'Delimiter', ',');
 
 %% Write movie
 
-if 1
+diff_skin = true; % movie should have diffusion skin or not
+
+if diff_skin
     vid_frames = cell(2, 1);
     vid_frames{1} = I_seg;
     vid_frames{2} = img_d;
@@ -461,4 +471,13 @@ else
     vid_frames{1} = I_seg;
 end
 
-writeMovie(vid_frames, timelapse_cropped, outliers, 'test_skin.mp4');
+writeMovie(vid_frames, timelapse_cropped, outliers, 'test_skin2.mp4');
+
+clear diff_skin vid_frames
+
+%% save workspace
+
+clear d_flag distance err f1 f2 fdata I idx1 idx2 metadata options p2 p_pyc v2 
+save('workspace_test.mat')
+
+

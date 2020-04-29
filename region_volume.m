@@ -1,4 +1,4 @@
-function [vol, area, d_l, img2] = region_volume(img, h_px, d_px, base_mode, t)
+function [vol, area, d_l, img2, ax_l] = region_volume(img, h_px, d_px, base_mode, t)
 %REGION_VOLUME calculates volume and surface area for region of interest
 %
 % The function has two modes; 
@@ -18,7 +18,7 @@ elseif nargin == 4
     d_l = NaN;
 elseif nargin == 5
     mode = 'diffusion';
-    img2 = NaN;
+    ax_l = NaN;
 elseif nargin > 5
     disp('Too many input arguments')
     return
@@ -41,6 +41,7 @@ if strcmp(mode, 'volume') % Inner volume mode
            vol = NaN;
            area = NaN;
            img2 = img;
+           ax_l = [NaN, NaN];
            return;
         end
         r = floor(mean(r(1:5)));
@@ -58,11 +59,23 @@ if strcmp(mode, 'volume') % Inner volume mode
     end
     
     if 1
-        a = regionprops(img2, 'Centroid');
+        a = regionprops(img2, 'Area', 'Centroid', 'MajorAxisLength', 'MinorAxisLength');
+        
         if length(a) > 1
-            for i = 2:length(a)
+            max_area = max(vertcat(a.Area));
+            for i = 1:length(a)
+                if a(i).Area >= max_area
+                    r_px = mean([d_px, h_px]);
+                    ax_l = [a(i).MajorAxisLength, a(i).MinorAxisLength]./r_px;
+                   break 
+                end
                 img2  = imcomplement(imfill(imcomplement(img2), flip(round(a(i).Centroid))));
             end
+        elseif length(a) == 1
+            r_px = mean([d_px, h_px]);
+            ax_l = [a(1).MajorAxisLength, a(1).MinorAxisLength]./r_px;
+        else
+            ax_l = [NaN, NaN];
         end
     end
     
