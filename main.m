@@ -165,8 +165,8 @@ d = abs(x(2)-x(1));
 
 clear n x y
 
-h_px = h/7.60; % px/mm; Enter measured height
-d_px = d/7.55; % px/mm; Enter measured diameter
+h_px = h/11.27; % px/mm; Enter measured height
+d_px = d/10.10; % px/mm; Enter measured diameter
 
 
 %% Fine-tune segmentation
@@ -174,22 +174,22 @@ d_px = d/7.55; % px/mm; Enter measured diameter
 if strcmp(file_type, 'ptw')
     % low
     close all
-    I =  timelapse_cropped(:,:, 30);
-    var_low = [0.6, 1, 500];
+    I =  timelapse_cropped(:,:, 45);
+    var_low = [0.63, 1, 150];
     [~, var_low(4), var_low(5)] = segment_image_low(I, 'debug', var_low);
 
     %%
     % mid
     close all
-    I =  timelapse_cropped(:,:, 80);
-    var_mid = [0.58, 1, 800, var_low(4), var_low(5)];
+    I =  timelapse_cropped(:,:, 100);
+    var_mid = [0.6, 2, 1000, var_low(4), var_low(5)];
     [~, var_mid] = segment_image_mid(I, 'debug', var_mid);
 
     %%
     % high
     close all
     I =  timelapse_cropped(:,:, 500);
-    var_high = {0.585, 3, 200, var_low(4), var_low(5)};
+    var_high = {0.5905, 6, 200, var_low(4), var_low(5)};
     [~, var_high] = segment_image_high(I, 'debug', var_high);
 
 elseif strcmp(file_type, 'jpg')
@@ -214,9 +214,9 @@ remove_base = true;
 if strcmp(file_type, 'ptw')
     for i = 1:size(timelapse_cropped, 3)
        I = timelapse_cropped(:,:, i);
-       if i <=40        % Frame where the sample and bck is the same temp. Gray image
+       if i <=45        % Frame where the sample and bck is the same temp. Gray image
            I_seg(:,:,i) = segment_image_low(I, 'normal', var_low);
-       elseif i <=110 && i > 40         % 
+       elseif i <=140 && i > 45         % 
            I_seg(:,:,i) = segment_image_mid(I, 'normal', var_mid);
        else
            I_seg(:,:,i) = segment_image_high(I, 'normal', var_high);
@@ -267,7 +267,7 @@ close all
 
 %% Calculate porosity
 
-vol_pyc = 0.3357;
+vol_pyc = 0.8959;
 vol_init = mean(vol(sel2));
 area_init = mean(area(sel2));
 display(['Calculated volume: ' num2str(vol_init)]);
@@ -328,7 +328,7 @@ v2 = 100*vol_init./(100-p2);
 
 %% Calculating diffusion skin and inner core volume etc
 
-t_d = 6.4; % Initial temperature/10
+t_d = 2.5; % Initial temperature/10
 tic
 t_iso = 60;
 
@@ -382,9 +382,6 @@ for i =1:size(I_seg, 3)
     end
 end
 toc
-
-
-
 
 %% Plots
 

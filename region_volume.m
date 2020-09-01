@@ -18,7 +18,7 @@ elseif nargin == 4
     d_l = NaN;
 elseif nargin == 5
     mode = 'diffusion';
-    ax_l = NaN;
+    ax_l = [NaN, NaN];
 elseif nargin > 5
     disp('Too many input arguments')
     return
